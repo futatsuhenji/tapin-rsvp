@@ -76,7 +76,7 @@
     "redis": "^5.11.0",
     "shadcn": "^3.8.5",
     "shadcn-ui": "^0.9.5",
-    "tailwind-merge": "^3.5.0",
+    "tailwind-merge": "^3.7.0",
     "zod": "^4.3.6"
   },
   "devDependencies": {
