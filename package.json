@@ -92,7 +92,7 @@
     "eslint": "^9.39.4",
     "eslint-config-next": "16.1.1",
     "eslint-plugin-sonarjs": "^3.0.7",
-    "eslint-plugin-tsdoc": "^0.5.2",
+    "eslint-plugin-tsdoc": "^0.5.4",
     "eslint-plugin-unicorn": "^62.0.0",
     "jiti": "^2.6.1",
     "tailwindcss": "^4.2.1",
