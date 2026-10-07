@@ -22,3 +22,8 @@ updates:
   - hayatek-jp
   open-pull-requests-limit: 30
   target-branch: main
+
+- package-ecosystem: devcontainers
+  directory: /
+  schedule:
+    interval: weekly
