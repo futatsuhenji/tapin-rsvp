@@ -1,12 +1,14 @@
 // SPDX-FileCopyrightText: 2026 KATO Hayate <dev@hayatek.jp>
+// SPDX-FileCopyrightText: 2026 Yu Yokoyama <25w6105e@shinshu-u.ac.jp>
 // SPDX-License-Identifier: AGPL-3.0-only
 
-'use client';
-
-import { useEffect, useState } from 'react';
 import Link from 'next/link';
 
-import { honoClient } from '@/lib/hono';
+import { getPrismaClient } from '@/lib/prisma';
+import { getJwtFromCookieStore } from '@/utils/auth';
+import { forbidden } from 'next/navigation';
+
+export const dynamic = 'force-dynamic';
 
 type GroupItem = {
     id: string;
@@ -16,40 +18,51 @@ type GroupItem = {
     canManage: boolean;
 };
 
-type FetchState = 'idle' | 'loading' | 'error';
-
-export default function MyPage() {
-    const [groups, setGroups] = useState<GroupItem[]>([]);
-    const [fetchState, setFetchState] = useState<FetchState>('loading');
-
-    useEffect(() => {
-        const load = async () => {
-            setFetchState('loading');
-            try {
-                const response = await honoClient.api.groups.$get();
-                if (!response.ok) {
-                    setFetchState('error');
-                    return;
-                }
-                const data = await response.json() as { groups: GroupItem[] };
-                setGroups(data.groups);
-                setFetchState('idle');
-            } catch (e) {
-                console.error(e);
-                setFetchState('error');
-            }
-        };
-        load();
-    }, []);
-
-    if (fetchState === 'loading') {
-        return <div className="min-h-screen flex items-center justify-center bg-gray-50 text-gray-700">読込中…</div>;
+export default async function MyPage() {
+    const prisma = await getPrismaClient();
+    const jwt = await getJwtFromCookieStore();
+    if (!jwt) {
+        forbidden();
     }
-
-    if (fetchState === 'error') {
-        return <div className="min-h-screen flex items-center justify-center bg-gray-50 text-gray-700">マイページを読み込めませんでした</div>;
-    }
-
+    const userId = jwt.user.id;
+    const groups: GroupItem[] = (await prisma.eventGroup.findMany({
+        where: {
+            OR: [
+                { ownerId: userId },
+                {
+                    administrators: {
+                        some: { userId },
+                    },
+                },
+                {
+                    events: {
+                        some: {
+                            attendances: {
+                                some: { userId: userId },
+                            },
+                        },
+                    },
+                },
+            ],
+        },
+        orderBy: {
+            createdAt: 'desc',
+        },
+        select: {
+            id: true,
+            name: true,
+            description: true,
+            ownerId: true,
+            administrators: { select: { userId: true } },
+        },
+    // eslint-disable-next-line unicorn/no-await-expression-member
+    })).map((group) => ({
+        id: group.id,
+        name: group.name,
+        description: group.description,
+        ownerId: group.ownerId,
+        canManage: group.ownerId === userId || group.administrators.some((admin) => admin.userId === userId),
+    }));
     return (
         <div className="min-h-screen bg-gray-50">
             <div className="mx-auto max-w-5xl px-4 py-10 space-y-6">

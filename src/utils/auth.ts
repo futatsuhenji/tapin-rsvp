@@ -1,6 +1,8 @@
 // SPDX-FileCopyrightText: 2026 KATO Hayate <dev@hayatek.jp>
 // SPDX-License-Identifier: AGPL-3.0-only
 
+import 'server-only';
+
 import { randomUUID } from 'node:crypto';
 
 import { getCookie } from 'hono/cookie';
