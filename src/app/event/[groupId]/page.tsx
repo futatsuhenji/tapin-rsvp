@@ -1,13 +1,15 @@
 // SPDX-FileCopyrightText: 2026 KATO Hayate <dev@hayatek.jp>
 // SPDX-License-Identifier: AGPL-3.0-only
 
-'use client';
-
-import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { useParams } from 'next/navigation';
 
-import { honoClient } from '@/lib/hono';
+import { Prisma } from '@/generated/prisma/client';
+
+import { getPrismaClient } from '@/lib/prisma';
+import { getJwtFromCookieStore } from '@/utils/auth';
+
+import type { JSX } from 'react';
+import { notFound } from 'next/navigation';
 
 type EventListItem = {
     id: string;
@@ -19,8 +21,6 @@ type EventListItem = {
     registrationEndsAt: string | null;
     canManage: boolean;
 };
-
-type FetchState = 'idle' | 'loading' | 'error';
 
 function formatDateRange(startsAt: string | null, endsAt: string | null): string {
     if (!startsAt && !endsAt) return '未定';
@@ -37,39 +37,64 @@ function formatDateRange(startsAt: string | null, endsAt: string | null): string
     return `${format(endsAt!)} 終了`; // endsAtのみ
 }
 
-export default function EventListPage() {
-    const { groupId } = useParams<{ groupId: string }>();
-    const [fetchState, setFetchState] = useState<FetchState>('loading');
-    const [events, setEvents] = useState<EventListItem[]>([]);
+export default async function EventListPage({ params }: { params: Promise<{ groupId: string }> }): Promise<JSX.Element> {
+    const { groupId } = await params;
 
-    useEffect(() => {
-        const load = async () => {
-            if (!groupId) return;
-            setFetchState('loading');
-            try {
-                const response = await honoClient.api.events[':groupId'].$get({ param: { groupId } });
-                if (!response.ok) {
-                    setFetchState('error');
-                    return;
-                }
-                const data = await response.json() as { events: EventListItem[] };
-                setEvents(data.events);
-                setFetchState('idle');
-            } catch (e) {
-                console.error(e);
-                setFetchState('error');
-            }
-        };
-        load();
-    }, [groupId]);
+    const prisma = await getPrismaClient();
+    const jwt = await getJwtFromCookieStore();
 
-    if (fetchState === 'loading') {
-        return <div className="min-h-screen flex items-center justify-center bg-gray-50 text-gray-700">読込中…</div>;
+    if (!jwt) notFound();
+    const userId = jwt.user.id;
+
+    // グループオーナー / 管理者確認
+    const group = await prisma.eventGroup.findUnique({
+        where: { id: groupId },
+        select: { ownerId: true },
+    });
+
+    if (!group) notFound();
+
+    const isGroupOwner = group.ownerId === userId;
+    const isGroupAdmin = await prisma.eventGroupAdministrator.findUnique({
+        where: { groupId_userId: { groupId, userId } },
+        select: { userId: true },
+    });
+
+    const whereCondition: Prisma.EventWhereInput = { groupId };
+
+    // グループオーナー or グループ管理者は全件
+    if (!isGroupOwner && !isGroupAdmin) {
+        whereCondition.OR = [
+            { ownerId: userId },
+            { administrators: { some: { userId } } },
+            { attendances: { some: { userId } } },
+        ];
     }
 
-    if (fetchState === 'error') {
-        return <div className="min-h-screen flex items-center justify-center bg-gray-50 text-gray-700">イベント一覧を取得できませんでした</div>;
-    }
+    const events: EventListItem[] = (await prisma.event.findMany({
+        where: whereCondition,
+        orderBy: { startsAt: 'asc' },
+        select: {
+            id: true,
+            name: true,
+            description: true,
+            place: true,
+            startsAt: true,
+            endsAt: true,
+            registrationEndsAt: true,
+            ownerId: true,
+            administrators: { select: { userId: true } },
+        },
+    // eslint-disable-next-line unicorn/no-await-expression-member
+    })).map((event) => {
+        const canManage =
+            event.ownerId === userId || event.administrators.some((admin) => admin.userId === userId) || !!isGroupAdmin;
+        return {
+            ...event,
+            canManage,
+            administrators: undefined,
+        } as unknown as { id: string; name: string; description: string | null; place: string | null; startsAt: string | null; endsAt: string | null; registrationEndsAt: string | null; ownerId: string; canManage: boolean };
+    });
 
     return (
         <div className="min-h-screen bg-gray-50">
