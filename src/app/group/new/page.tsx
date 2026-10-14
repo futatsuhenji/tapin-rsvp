@@ -2,13 +2,26 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 import Link from 'next/link';
+import { forbidden } from 'next/navigation';
 
 import GroupCreateForm from './client';
+import { getPrismaClient } from '@/lib/prisma';
 import { getJwtFromCookieStore } from '@/utils/auth';
 
 export const dynamic = 'force-dynamic';
 
 export default async function GroupCreatePage() {
+    async function createGroup(name: string, description?: string): Promise<string> {
+        'use server';
+        const jwt = await getJwtFromCookieStore();
+        if (!jwt) forbidden();
+        const prisma = await getPrismaClient();
+        const result = await prisma.eventGroup.create({
+            select: { id: true },
+            data: { ownerId: jwt.user.id, name, description },
+        });
+        return result.id;
+    }
     const jwt = await getJwtFromCookieStore();
     const ownerId = jwt?.user.id ?? null;
 
@@ -32,7 +45,7 @@ export default async function GroupCreatePage() {
                     <p className="text-sm text-gray-700">
                         グループを作成すると、イベントの管理や招待、参加者の管理が行えます。
                     </p>
-                    <GroupCreateForm ownerId={ownerId} />
+                    <GroupCreateForm ownerId={ownerId} onGroupCreate={createGroup} />
                 </div>
             </div>
         </div>

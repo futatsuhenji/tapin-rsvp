@@ -6,15 +6,14 @@
 import { FormEvent, useState } from 'react';
 import { useRouter } from 'next/navigation';
 
-import { honoClient } from '@/lib/hono';
-
 type SaveState = 'idle' | 'saving' | 'error';
 
 type Properties = {
     ownerId: string | null;
+    onGroupCreate: (name: string, description: string) => Promise<string>;
 };
 
-export default function GroupCreateForm({ ownerId }: Properties) {
+export default function GroupCreateForm({ ownerId, onGroupCreate }: Properties) {
     const router = useRouter();
     const [name, setName] = useState('');
     const [description, setDescription] = useState('');
@@ -27,21 +26,8 @@ export default function GroupCreateForm({ ownerId }: Properties) {
 
         setSaveState('saving');
         try {
-            const response = await honoClient.api.groups.$post({
-                json: {
-                    name: name.trim(),
-                    ownerId,
-                    description: description.trim() || undefined,
-                },
-            });
-
-            if (!response.ok) {
-                setSaveState('error');
-                return;
-            }
-
-            const created = (await response.json()) as { id: string };
-            router.push(`/group/${created.id}/manage`);
+            const created = await onGroupCreate(name, description);
+            router.push(`/group/${created}/manage`);
         } catch (e) {
             console.error(e);
             setSaveState('error');
